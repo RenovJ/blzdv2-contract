@@ -1473,7 +1473,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
     address public YetiMasterAddress;
     address public xBLZDAddress;
     address public govAddress; // timelock contract
-    bool public onlyGov = true;
+    bool public onlyGov = false;
 
     uint256 public lastEarnBlock = 0;
     uint256 public wantLockedTotal = 0;
@@ -1645,7 +1645,7 @@ contract StrategyChef is Ownable, ReentrancyGuard, Pausable {
             0,
             earnedToxBLZDPath,
             buyBackAddress,
-            now + 60
+            now + 600
         );
     }
 

@@ -1130,7 +1130,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
     address public BLZD = 0x57067A6BD75c0E95a6A5f158455926e43E79BeB0;
 
     // xBLZD
-    address public xBLZD = 0x000000000000000000000000000000000000dEaD;
+    address public xBLZD = 0x5042E3FCb08eb5637116B214697f0Ea306588C76;
 
      // Dev address.
     address public devaddr;
@@ -1159,6 +1159,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         uint256 indexed pid,
         uint256 amount
     );
+    event MigrateToV2(address indexed user,uint256 amount);
     event SetFeeAddressBb(address indexed user, address indexed newAddress);
     event SetFeeAddressSt(address indexed user, address indexed newAddress);
     event SetDevAddress(address indexed user, address indexed newAddress);
@@ -1167,7 +1168,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         return poolInfo.length;
     }
 
-     constructor(
+    constructor(
         address _devaddr,
         uint256 _startBlock,
         uint256 _noFeeBlock
@@ -1175,6 +1176,11 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         devaddr = _devaddr;
         startBlock = _startBlock;
         noFeeBlock = _noFeeBlock;
+    }
+
+    modifier poolExists(uint256 pid) {
+        require(pid < poolInfo.length, "pool inexistent");
+        _;
     }
 
     // Add a new lp to the pool. Can only be called by the owner.
@@ -1211,7 +1217,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         uint256 _allocPoint,
         bool _withUpdate,
         uint16 _depositFeeBP
-    ) public onlyOwner {
+    ) public onlyOwner poolExists(_pid) {
         require(_depositFeeBP <= 200, "set: invalid deposit fee basis points");
         if (_withUpdate) {
             massUpdatePools();
@@ -1290,9 +1296,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
         xBLZDToken(xBLZD).mint(
             address(this),
-            multiplier.mul(xBLZDPerBlock).mul(pool.allocPoint).div(
-                totalAllocPoint
-            )
+            xBLZDReward
         );
 
         pool.accxBLZDPerShare = pool.accxBLZDPerShare.add(
@@ -1301,7 +1305,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         pool.lastRewardBlock = block.number;
     }
 
-    function deposit(uint256 _pid,uint256 _wantAmt) public nonReentrant{
+    function deposit(uint256 _pid,uint256 _wantAmt) public nonReentrant poolExists(_pid){
         updatePool(_pid);
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
@@ -1322,7 +1326,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
                 uint256 depositFee = _wantAmt.mul(pool.depositFeeBP).div(10000);
                 uint256 depositeFeeHalf = depositFee.div(2);
                 pool.want.safeTransfer(feeAddBb, depositeFeeHalf);
-                pool.want.safeTransfer(feeAddSt, depositeFeeHalf);
+                pool.want.safeTransfer(feeAddSt, depositFee.sub(depositeFeeHalf));
                 amount = (_wantAmt).sub(depositFee);
             }
             pool.want.safeIncreaseAllowance(pool.strat, amount);
@@ -1335,7 +1339,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
     }
 
     // Withdraw LP tokens from MasterChef.
-    function withdraw(uint256 _pid, uint256 _wantAmt) public nonReentrant {
+    function withdraw(uint256 _pid, uint256 _wantAmt) public nonReentrant poolExists(_pid){
         updatePool(_pid);
 
         PoolInfo storage pool = poolInfo[_pid];
@@ -1381,12 +1385,8 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         emit Withdraw(msg.sender, _pid, _wantAmt);
     }
 
-    function withdrawAll(uint256 _pid) public nonReentrant {
-        withdraw(_pid, uint256(-1));
-    }
-
     // Withdraw without caring about rewards. EMERGENCY ONLY.
-    function emergencyWithdraw(uint256 _pid) public nonReentrant {
+    function emergencyWithdraw(uint256 _pid) public nonReentrant poolExists(_pid){
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
 
@@ -1394,10 +1394,10 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
         IStrategy(pool.strat).withdraw(amount);
 
-        pool.want.safeTransfer(address(msg.sender), amount);
-        emit EmergencyWithdraw(msg.sender, _pid, amount);
         user.amount = 0;
         user.rewardDebt = 0;
+        pool.want.safeTransfer(address(msg.sender), amount);
+        emit EmergencyWithdraw(msg.sender, _pid, amount);
     }
 
     // Safe xBLZD transfer function, just in case if rounding error causes pool to not have enough
@@ -1439,7 +1439,7 @@ contract YetiMaster is Ownable, ReentrancyGuard {
 
     function migrateToxBLZD(uint256 _inputAmt) public {
         //TODO
-        // require(block.number < 5033333, "too late :("); 
+        // require(block.number < 5033333, "too late :(");
         IERC20(BLZD).safeTransferFrom(
             address(msg.sender),
             burnAddress,
@@ -1447,5 +1447,6 @@ contract YetiMaster is Ownable, ReentrancyGuard {
         );
 
         xBLZDToken(xBLZD).mint(msg.sender, _inputAmt);
+        emit MigrateToV2(msg.sender,_inputAmt);
     }
 }

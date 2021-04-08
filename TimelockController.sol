@@ -1122,6 +1122,8 @@ interface IStrategy {
 
     function farm() external;
 
+    function unlock() external;
+
     function pause() external;
 
     function unpause() external;
@@ -1702,6 +1704,10 @@ contract TimelockController is AccessControl {
 
     function unpause(address _stratAddress) public onlyRole(EXECUTOR_ROLE) {
         IStrategy(_stratAddress).unpause();
+    }
+
+    function unlock(address _stratAddress) public onlyRole(EXECUTOR_ROLE) {
+        IStrategy(_stratAddress).unlock();
     }
 
     function rebalance(
